@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Aplikasi{% endblock %}
+{% block page_title %}Aplikasi Terdaftar{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('admin.app_create') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Daftarkan Aplikasi
+  </a>
+{% endblock %}
+
+{% block content %}
+{% if apps %}
+<div class="row g-3">
+  {% for app in apps %}
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex align-items-start gap-3">
+          <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#6c63ff,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;color:#fff;flex-shrink:0">
+            {{ app.app_name[0]|upper }}
+          </div>
+          <div class="flex-grow-1 min-width-0">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <span class="fw-bold fs-6">{{ app.app_name }}</span>
+              {% if app.is_active %}<span class="badge text-bg-success">Aktif</span>{% else %}<span class="badge text-bg-danger">Nonaktif</span>{% endif %}
+              {% if app.auto_redirect %}<span class="badge text-bg-primary">⚡ Auto Redirect</span>{% endif %}
+            </div>
+            {% if app.description %}<p class="text-muted small mb-2">{{ app.description }}</p>{% endif %}
+
+            <div class="row g-2">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted mb-1">App ID</label>
+                <div class="input-group input-group-sm">
+                  <code class="form-control bg-light" style="font-size:12px">{{ app.app_id }}</code>
+                  <button class="btn btn-outline-secondary" onclick="copyText('{{ app.app_id }}')"><i class="bi bi-clipboard"></i></button>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted mb-1">App Secret</label>
+                <div class="input-group input-group-sm">
+                  <input type="password" class="form-control bg-light" value="{{ app.app_secret }}"
+                         id="secret-{{ app.app_id }}" readonly style="font-size:12px">
+                  <button class="btn btn-outline-secondary" onclick="toggleSecret('{{ app.app_id }}')"><i class="bi bi-eye"></i></button>
+                  <button class="btn btn-outline-secondary" onclick="copyText('{{ app.app_secret }}')"><i class="bi bi-clipboard"></i></button>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label small fw-semibold text-muted mb-1">SSO Login URL</label>
+                <div class="input-group input-group-sm">
+                  <code class="form-control bg-light" style="font-size:12px">{{ sso_base }}/sso/login?app_id={{ app.app_id }}</code>
+                  <button class="btn btn-outline-secondary" onclick="copyText('{{ sso_base }}/sso/login?app_id={{ app.app_id }}')"><i class="bi bi-clipboard"></i></button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex flex-column gap-2 flex-shrink-0">
+            <a href="{{ url_for('admin.app_edit', app_id=app.app_id) }}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil me-1"></i>Edit
+            </a>
+            <a href="{{ url_for('rights.app_rights', app_id=app.app_id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-shield-lock me-1"></i>Rights
+            </a>
+            <button onclick="regenerateSecret('{{ app.app_id }}')" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-arrow-clockwise me-1"></i>Secret
+            </button>
+            <form method="POST" action="{{ url_for('admin.app_delete', app_id=app.app_id) }}"
+                  onsubmit="return confirm('Hapus {{ app.app_name }}?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                <i class="bi bi-trash me-1"></i>Hapus
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card"><div class="card-body text-center py-5 text-muted">
+  <i class="bi bi-grid display-4 d-block mb-3"></i>
+  <div class="fw-semibold mb-2">Belum ada aplikasi</div>
+  <a href="{{ url_for('admin.app_create') }}" class="btn btn-primary btn-sm">+ Daftarkan Pertama</a>
+</div></div>
+{% endif %}
+
+<!-- Modal new secret -->
+<div class="modal fade" id="secretModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">Secret Baru</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <p class="text-muted small">Simpan secret ini sekarang. Semua session dicabut.</p>
+        <div class="input-group">
+          <code class="form-control bg-light" id="new-secret-val" style="font-size:11px;word-break:break-all"></code>
+          <button class="btn btn-outline-secondary" onclick="copyText(document.getElementById('new-secret-val').textContent)"><i class="bi bi-clipboard"></i></button>
+        </div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-primary btn-sm" data-bs-dismiss="modal">Selesai</button></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSecret(appId) {
+  const inp = document.getElementById('secret-' + appId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+async function regenerateSecret(appId) {
+  if (!confirm('Regenerate secret? Semua session aplikasi ini dicabut!')) return;
+  const res  = await fetch(`/admin/apps/${appId}/regenerate-secret`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    document.getElementById('new-secret-val').textContent = data.new_secret;
+    new bootstrap.Modal(document.getElementById('secretModal')).show();
+  }
+}
+</script>
+{% endblock %}

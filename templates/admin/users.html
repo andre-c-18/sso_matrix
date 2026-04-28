@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block page_title %}Manajemen Users{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('admin.user_create') }}" class="btn btn-primary btn-sm">
+    <i class="bi bi-person-plus me-1"></i>Tambah User
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="GET" class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label small fw-semibold mb-1">Cari</label>
+        <input type="text" name="q" value="{{ search }}" class="form-control form-control-sm"
+               placeholder="Nama, username, email...">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Role</label>
+        <select name="role" class="form-select form-select-sm">
+          <option value="">Semua Role</option>
+          {% for r in roles %}
+          <option value="{{ r.name }}" {% if role_filter==r.name %}selected{% endif %}>{{ r.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm">Cari</button>
+        {% if search or role_filter %}
+        <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-semibold">
+    <i class="bi bi-people me-1"></i>{{ users|length }} User
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr><th>User</th><th>Email</th><th>Role</th><th>Status</th><th>Last Login</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6c63ff,#8b5cf6);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;flex-shrink:0">
+                {{ u.full_name[0]|upper }}
+              </div>
+              <div>
+                <div class="fw-semibold">{{ u.full_name }}</div>
+                <div class="text-muted small">@{{ u.username }}</div>
+              </div>
+            </div>
+          </td>
+          <td class="text-muted">{{ u.email }}</td>
+          <td>
+            <span class="badge
+              {% if u.role_name=='superadmin' %}text-bg-danger
+              {% elif u.role_name=='admin' %}text-bg-warning text-dark
+              {% elif u.role_name=='manager' %}text-bg-success
+              {% else %}text-bg-secondary{% endif %}">
+              {{ u.role_name }}
+            </span>
+          </td>
+          <td>
+            <button onclick="toggleUser({{ u.id }}, this)"
+                    class="badge border-0 {% if u.is_active %}text-bg-success{% else %}text-bg-danger{% endif %}"
+                    style="cursor:pointer">
+              {% if u.is_active %}● Aktif{% else %}○ Nonaktif{% endif %}
+            </button>
+          </td>
+          <td class="text-muted small">
+            {% if u.last_login %}{{ u.last_login.strftime('%d/%m/%Y %H:%M') }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('admin.user_edit', uid=u.id) }}" class="btn btn-sm btn-outline-secondary">
+              <i class="bi bi-pencil"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-5">Tidak ada user ditemukan</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleUser(uid, btn) {
+  if (!confirm('Ubah status user ini?')) return;
+  const res  = await fetch(`/admin/users/${uid}/toggle`, {method:'POST'});
+  const data = await res.json();
+  if (data.success) {
+    btn.className = 'badge border-0 ' + (data.is_active ? 'text-bg-success' : 'text-bg-danger');
+    btn.textContent = data.is_active ? '● Aktif' : '○ Nonaktif';
+  }
+}
+</script>
+{% endblock %}

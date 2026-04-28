@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Audit Logs{% endblock %}
+{% block page_title %}Audit Logs{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="bi bi-journal-text me-1"></i>{{ total }} log</span>
+    <span class="text-muted small">Halaman {{ page }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr><th>Waktu</th><th>User</th><th>Aksi</th><th>App</th><th>Detail</th><th>IP</th></tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="text-muted small text-nowrap">{{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+          <td>{{ log.username or '—' }}</td>
+          <td><code>{{ log.action }}</code></td>
+          <td class="text-muted small">{{ log.app_id or '—' }}</td>
+          <td class="text-muted small">{{ (log.detail or '')[:60] }}</td>
+          <td class="text-muted small">{{ log.ip_address or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-5">Belum ada log</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if total > per_page %}
+  <div class="card-footer d-flex justify-content-center gap-2">
+    {% if page > 1 %}<a href="?page={{ page-1 }}" class="btn btn-sm btn-outline-secondary">← Sebelumnya</a>{% endif %}
+    <span class="btn btn-sm btn-light disabled">{{ page }}</span>
+    {% if page*per_page < total %}<a href="?page={{ page+1 }}" class="btn btn-sm btn-outline-secondary">Berikutnya →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Override Akses: {{ user.full_name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('rights.user_override_list') }}" class="btn btn-outline-secondary btn-sm">← Kembali</a>
+{% endblock %}
+
+{% block head %}
+<style>
+  .role-panel {
+    border: 2px solid #e2e8f0; border-radius: 12px;
+    background: #fff; overflow: hidden;
+  }
+  .role-panel-header {
+    padding: 14px 18px; background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* Action checkboxes */
+  .action-check { display: none; }
+  .action-label {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 82px; height: 72px; border-radius: 10px;
+    border: 2px solid #e2e8f0; cursor: pointer;
+    transition: all .15s; background: #fff; gap: 4px;
+  }
+  .action-label:hover { border-color: #94a3b8; background: #f8fafc; }
+  .action-check:checked + .action-label {
+    border-color: currentColor;
+  }
+  .action-icon { font-size: 20px; }
+  .action-text { font-size: 11px; font-weight: 700; }
+
+  /* Per-action active colors */
+  .ac-view:checked    + .action-label { border-color:#0d6efd; background:#eff6ff; color:#0d6efd; }
+  .ac-edit:checked    + .action-label { border-color:#f59e0b; background:#fffbeb; color:#b45309; }
+  .ac-export:checked  + .action-label { border-color:#10b981; background:#f0fdf4; color:#065f46; }
+  .ac-approve:checked + .action-label { border-color:#0891b2; background:#ecfeff; color:#0e7490; }
+  .ac-upload:checked  + .action-label { border-color:#6b7280; background:#f9fafb; color:#374151; }
+  .ac-delete:checked  + .action-label { border-color:#ef4444; background:#fff5f5; color:#b91c1c; }
+
+  /* Path tags */
+  .path-tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    color: #1d4ed8; border-radius: 6px;
+    padding: 3px 8px; font-size: 12px; font-family: monospace;
+  }
+  .path-tag .remove-path {
+    cursor: pointer; color: #93c5fd; border: none;
+    background: none; padding: 0; line-height: 1; font-size: 13px;
+  }
+  .path-tag .remove-path:hover { color: #1d4ed8; }
+
+  /* Config rows */
+  .cfg-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: #f8fafc;
+    border-radius: 6px; margin-bottom: 6px;
+  }
+
+  .override-active { border: 2px solid #0d6efd; box-shadow: 0 0 15px rgba(13, 110, 253, 0.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h4><i class="bi bi-person-badge me-2"></i>Pengaturan Akses Spesifik</h4>
+    <p class="text-muted">Mengatur akses khusus untuk <strong>{{ user.full_name }}</strong> (@{{ user.username }}) pada aplikasi <strong>{{ app.app_name }}</strong>.</p>
+    <div class="alert alert-info d-flex align-items-center">
+        <i class="bi bi-info-circle-fill me-2"></i>
+        <div>
+            Pengaturan di sini akan <strong>menimpa (override)</strong> pengaturan default dari Role <strong>{{ user.role_name }}</strong>.
+        </div>
+    </div>
+</div>
+
+<div class="role-panel override-active">
+    <div class="role-panel-header">
+        <span class="fw-bold"><i class="bi bi-cpu me-2"></i>Konfigurasi Akses</span>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteOverride()">
+                <i class="bi bi-trash me-1"></i>Hapus Override (Kembali ke Role)
+            </button>
+        </div>
+    </div>
+
+    <div class="p-4">
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="fw-semibold small text-muted text-uppercase mb-3">Standard Access</div>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for action in actions %}
+                    <div>
+                        <input type="checkbox" class="action-check ac-{{ action.key }}" 
+                               id="ac_{{ action.key }}" name="user_ac" value="{{ action.key }}"
+                               {% if action.key in standard_access %}checked{% endif %}
+                               onchange="updatePreview()">
+                        <label class="action-label" for="ac_{{ action.key }}">
+                            <i class="bi {{ action.icon }} action-icon"></i>
+                            <span class="action-text">{{ action.label }}</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="fw-semibold small text-muted text-uppercase mb-3">Path Access</div>
+                <div id="path-tags" class="d-flex flex-wrap gap-1 mb-2"></div>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">/</span>
+                    <input type="text" class="form-control" id="path-input" placeholder="contoh: gudang/bs">
+                    <button class="btn btn-outline-primary" onclick="addPath()"><i class="bi bi-plus-lg"></i></button>
+                </div>
+                <div id="path-store" style="display:none" data-paths="{{ paths | tojson }}"></div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="fw-semibold small text-muted text-uppercase mb-3">
+                    Right Config (Data Level)
+                </div>
+                <div id="cfg-container">
+                    {% for key, val in extra_config.items() %}
+                    <div class="cfg-row">
+                        <input type="text" class="form-control form-control-sm cfg-key" value="{{ key }}" style="width:110px">
+                        <select class="form-select form-select-sm" style="width:72px">
+                            <option value="bool" {% if val is sameas true or val is sameas false %}selected{% endif %}>bool</option>
+                            <option value="number" {% if val is number and val is not sameas true and val is not sameas false %}selected{% endif %}>num</option>
+                            <option value="string" {% if val is string %}selected{% endif %}>str</option>
+                        </select>
+                        <input type="text" class="form-control form-control-sm cfg-val" 
+                               value="{% if val is sameas true %}true{% elif val is sameas false %}false{% else %}{{ val }}{% endif %}">
+                        <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.cfg-row').remove(); updatePreview()"><i class="bi bi-trash"></i></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button class="btn btn-sm btn-outline-secondary mt-2" onclick="addCfgRow()">+ Tambah Key</button>
+                <div class="form-text mt-2">Gunakan key seperti <code>warehouse_id</code> atau <code>is_manager</code>.</div>
+            </div>
+        </div>
+
+        <div class="mt-4 pt-3 border-top">
+            <pre class="bg-light rounded p-3" id="preview-json" style="font-size:11px"></pre>
+        </div>
+    </div>
+</div>
+
+<div class="mt-4">
+    <button class="btn btn-primary px-5" onclick="saveOverride()">
+        <i class="bi bi-cloud-upload me-2"></i>Simpan Perubahan User
+    </button>
+    <a href="{{ url_for('rights.user_override_list') }}" class="btn btn-outline-secondary px-4">
+        Batal
+    </a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 1. Data Dasar dari Jinja
+const USER_ID = Number("{{ user.id }}");
+const APP_ID_STRING = "{{ app.app_id }}";
+const APP_INTERNAL_ID = Number("{{ app.id }}");
+
+// ── Path Management (Sama dengan app_rights) ──────────────────
+function getPaths() {
+    const store = document.getElementById('path-store');
+    try { return JSON.parse(store.dataset.paths || '[]'); }
+    catch { return []; }
+}
+
+function setPaths(paths) {
+    const store = document.getElementById('path-store');
+    store.dataset.paths = JSON.stringify(paths);
+    renderPathTags(paths);
+    updatePreview();
+}
+
+function renderPathTags(paths) {
+    const container = document.getElementById('path-tags');
+    container.innerHTML = paths.map(p => `
+        <span class="path-tag">
+            ${p}
+            <button class="remove-path" type="button" onclick="removePath('${p.replace(/'/g,"\\'")}')">×</button>
+        </span>`).join('');
+}
+
+function addPath() {
+    const input = document.getElementById('path-input');
+    let val = input.value.trim().replace(/^\/+/, ''); 
+    if (!val) return;
+    const full = '/' + val;
+    const paths = getPaths();
+    if (!paths.includes(full)) {
+        paths.push(full);
+        setPaths(paths);
+    }
+    input.value = '';
+    input.focus();
+}
+
+function removePath(path) {
+    const paths = getPaths().filter(p => p !== path);
+    setPaths(paths);
+}
+
+// ── Right Config (Key-Value) ──────────────────────────────────
+function addCfgRow() {
+    const container = document.getElementById('cfg-container');
+    const div = document.createElement('div');
+    div.className = 'cfg-row';
+    div.innerHTML = `
+        <input type="text" class="form-control form-control-sm cfg-key" placeholder="key" style="width:110px" oninput="updatePreview()">
+        <select class="form-select form-select-sm" style="width:72px" onchange="updatePreview()">
+            <option value="bool">bool</option>
+            <option value="number">num</option>
+            <option value="string" selected>str</option>
+        </select>
+        <input type="text" class="form-control form-control-sm cfg-val" placeholder="value" oninput="updatePreview()">
+        <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.cfg-row').remove(); updatePreview()"><i class="bi bi-trash"></i></button>
+    `;
+    container.appendChild(div);
+}
+
+function getExtraConfig() {
+    const cfg = {};
+    document.querySelectorAll('.cfg-row').forEach(row => {
+        const k = row.querySelector('.cfg-key').value.trim();
+        const t = row.querySelector('select').value;
+        const v = row.querySelector('.cfg-val').value.trim();
+        if (!k) return;
+
+        if (t === 'bool') cfg[k] = (v.toLowerCase() === 'true' || v === '1');
+        else if (t === 'number') cfg[k] = isNaN(v) ? v : Number(v);
+        else cfg[k] = v;
+    });
+    return cfg;
+}
+
+// ── Preview & Init ───────────────────────────────────────────
+function updatePreview() {
+    const actions = [...document.querySelectorAll('input[name="user_ac"]:checked')].map(cb => cb.value);
+    const paths = getPaths();
+    const extra = getExtraConfig();
+
+    const finalConfig = {
+        standard_access: actions,
+        right_config: {
+            paths: paths,
+            ...extra
+        }
+    };
+
+    document.getElementById('preview-json').textContent = JSON.stringify(finalConfig, null, 2);
+}
+
+// Jalankan saat halaman siap
+document.addEventListener('DOMContentLoaded', () => {
+    renderPathTags(getPaths());
+    updatePreview();
+});
+
+// ── Simpan Data (Save) ────────────────────────────────────────
+async function saveOverride() {
+    const btn = event.currentTarget;
+    const originalContent = btn.innerHTML;
+
+    const actions = [...document.querySelectorAll('input[name="user_ac"]:checked')].map(cb => cb.value);
+    const paths = getPaths();
+    const extra = getExtraConfig();
+
+    const payload = {
+        user_id: USER_ID,
+        app_id_string: APP_ID_STRING,
+        app_internal_id: APP_INTERNAL_ID,
+        standard_access: actions,
+        right_config: { paths, ...extra }
+    };
+
+    try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menyimpan...';
+
+        const res = await fetch('/rights/user/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            alert('✓ Berhasil! Akses spesifik user telah disimpan.');
+            location.reload();
+        } else {
+            alert('✗ Gagal: ' + (data.error || 'Terjadi kesalahan'));
+        }
+    } catch (e) {
+        alert('✗ Error: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalContent;
+    }
+}
+
+// ── Hapus Override (Delete) ───────────────────────────────────
+async function deleteOverride() {
+    if (!confirm("Apakah Anda yakin ingin menghapus override ini? User akan kembali menggunakan akses default dari Role-nya.")) {
+        return;
+    }
+
+    try {
+        const res = await fetch('/rights/user/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: USER_ID,
+                app_id: APP_INTERNAL_ID
+            })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+            alert('✓ Override dihapus. User kembali ke pengaturan Role.');
+            // Redirect kembali ke daftar user atau reload
+            window.location.href = '/rights/user-overrides'; 
+        } else {
+            alert('✗ Gagal menghapus: ' + (data.error || 'Terjadi kesalahan'));
+        }
+    } catch (e) {
+        alert('✗ Error: ' + e.message);
+    }
+}
+</script>
+{% endblock %}

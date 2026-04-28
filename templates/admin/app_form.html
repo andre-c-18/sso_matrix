@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{% if app %}Edit Aplikasi{% else %}Daftarkan Aplikasi{% endif %}{% endblock %}
+{% block page_title %}{% if app %}Edit — {{ app.app_name }}{% else %}Daftarkan Aplikasi Baru{% endif %}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('admin.apps_list') }}" class="btn btn-outline-secondary btn-sm">← Kembali</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-7">
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">Informasi Aplikasi</div>
+      <div class="card-body">
+        <form method="POST">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Nama Aplikasi <span class="text-danger">*</span></label>
+            <input type="text" name="app_name" class="form-control"
+                   value="{{ app.app_name if app else '' }}" required
+                   placeholder="Contoh: Sistem HRD, Portal Karyawan">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Deskripsi</label>
+            <textarea name="description" class="form-control" rows="2"
+                      placeholder="Keterangan singkat aplikasi">{{ app.description if app else '' }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Callback URL <span class="text-danger">*</span></label>
+            <input type="url" name="callback_url" class="form-control"
+                   value="{{ app.callback_url if app else '' }}" required
+                   placeholder="https://app-anda.com/auth/callback">
+            <div class="form-text">
+              Setelah login berhasil, user diredirect ke sini dengan
+              <code>?access_token=...&expires_in=...</code>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Allowed Origins</label>
+            <textarea name="allowed_origins" class="form-control" rows="2"
+                      placeholder="https://app-anda.com&#10;https://staging.app-anda.com">{{ app.allowed_origins if app else '' }}</textarea>
+            <div class="form-text">Satu URL per baris (untuk validasi CORS)</div>
+          </div>
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="auto_redirect" id="auto_redirect"
+                     {% if app and app.auto_redirect %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="auto_redirect">
+                ⚡ Auto Redirect
+              </label>
+              <div class="form-text">Langsung redirect ke callback tanpa halaman konfirmasi</div>
+            </div>
+          </div>
+          {% if app %}
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
+                     {% if app.is_active %}checked{% endif %}>
+              <label class="form-check-label" for="is_active">Aplikasi aktif</label>
+            </div>
+          </div>
+          {% endif %}
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              {% if app %}<i class="bi bi-save me-1"></i>Simpan{% else %}<i class="bi bi-plus-lg me-1"></i>Daftarkan{% endif %}
+            </button>
+            <a href="{{ url_for('admin.apps_list') }}" class="btn btn-outline-secondary">Batal</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if app %}
+    <div class="card">
+      <div class="card-header fw-semibold small"><i class="bi bi-key me-1"></i>Credentials</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold text-muted">App ID</label>
+          <div class="input-group input-group-sm">
+            <code class="form-control bg-light">{{ app.app_id }}</code>
+            <button class="btn btn-outline-secondary" onclick="copyText('{{ app.app_id }}')"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label small fw-semibold text-muted">App Secret <small class="fw-normal">(klik untuk tampilkan)</small></label>
+          <div class="input-group input-group-sm">
+            <input type="password" id="secret-field" class="form-control bg-light"
+                   value="{{ app.app_secret }}" readonly>
+            <button class="btn btn-outline-secondary"
+                    onclick="const f=document.getElementById('secret-field');f.type=f.type==='password'?'text':'password'">
+              <i class="bi bi-eye"></i>
+            </button>
+            <button class="btn btn-outline-secondary" onclick="copyText('{{ app.app_secret }}')"><i class="bi bi-clipboard"></i></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Access Matrix{% endblock %}
+{% block page_title %}Access Matrix{% endblock %}
+
+{% block content %}
+<p class="text-muted mb-4" style="font-size:13.5px">
+  Atur hak akses dan path yang diizinkan per role untuk setiap aplikasi.
+  Pengaturan dikirim di dalam JWT token saat user login.
+</p>
+
+{% if apps %}
+<div class="row g-3">
+  {% for app in apps %}
+  <div class="col-md-6 col-xl-4">
+    <a href="{{ url_for('rights.app_rights', app_id=app.app_id) }}" class="text-decoration-none">
+      <div class="card h-100" style="transition:box-shadow .15s;cursor:pointer"
+           onmouseover="this.style.boxShadow='0 4px 16px rgba(108,99,255,.15)'"
+           onmouseout="this.style.boxShadow=''">
+        <div class="card-body">
+
+          <!-- Header -->
+          <div class="d-flex align-items-center gap-3 mb-3">
+            <div style="width:44px;height:44px;border-radius:10px;
+                        background:linear-gradient(135deg,#6c63ff,#8b5cf6);
+                        display:flex;align-items:center;justify-content:center;
+                        font-weight:800;font-size:18px;color:#fff;flex-shrink:0">
+              {{ app.app_name[0]|upper }}
+            </div>
+            <div class="flex-grow-1 min-width-0">
+              <div class="fw-bold text-truncate">{{ app.app_name }}</div>
+              <div class="text-muted small text-truncate">{{ app.app_id }}</div>
+            </div>
+            {% if not app.is_active %}
+            <span class="badge text-bg-danger flex-shrink-0">Nonaktif</span>
+            {% endif %}
+          </div>
+
+          <!-- Ringkasan per role -->
+          <div class="d-flex flex-column gap-1">
+            {% for row in app.matrix_summary %}
+            <div class="d-flex align-items-center justify-content-between
+                        px-2 py-1 rounded" style="background:#f8fafc">
+              <span class="badge
+                {% if row.role_name=='superadmin' %}text-bg-danger
+                {% elif row.role_name=='admin' %}text-bg-warning text-dark
+                {% elif row.role_name=='manager' %}text-bg-success
+                {% else %}text-bg-secondary{% endif %}"
+                style="font-size:11px">{{ row.role_name }}</span>
+
+              <div class="d-flex gap-1 flex-wrap justify-content-end">
+                {% if row.standard_access %}
+                  {% for action in actions %}
+                    {% if action.key in row.standard_access %}
+                    <span class="badge text-bg-{{ action.color }}"
+                          style="font-size:10px;padding:2px 6px">
+                      <i class="bi {{ action.icon }}"></i>
+                    </span>
+                    {% endif %}
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted" style="font-size:11px">Belum dikonfigurasi</span>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+        </div>
+        <div class="card-footer bg-white d-flex justify-content-between align-items-center py-2">
+          <small class="text-muted"><i class="bi bi-shield-lock me-1"></i>Atur rights</small>
+          <i class="bi bi-chevron-right text-muted"></i>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="card">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-grid display-4 d-block mb-3 opacity-25"></i>
+    <div class="fw-semibold mb-1">Belum ada aplikasi terdaftar</div>
+    <a href="{{ url_for('admin.app_create') }}" class="btn btn-primary btn-sm mt-2">
+      <i class="bi bi-plus-lg me-1"></i>Daftarkan Aplikasi
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

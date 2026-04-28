@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{% if user %}Edit User{% else %}Tambah User{% endif %}{% endblock %}
+{% block page_title %}{% if user %}Edit — {{ user.username }}{% else %}Tambah User Baru{% endif %}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-secondary btn-sm">← Kembali</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-7">
+    {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">Informasi User</div>
+      <div class="card-body">
+        <form method="POST">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Nama Lengkap <span class="text-danger">*</span></label>
+              <input type="text" name="full_name" class="form-control"
+                     value="{{ user.full_name if user else '' }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Username {% if not user %}<span class="text-danger">*</span>{% endif %}</label>
+              {% if user %}
+                <input type="text" class="form-control" value="{{ user.username }}" disabled>
+              {% else %}
+                <input type="text" name="username" class="form-control" required
+                       pattern="[a-zA-Z0-9_]+" title="Hanya huruf, angka, underscore">
+              {% endif %}
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Email <span class="text-danger">*</span></label>
+              <input type="email" name="email" class="form-control"
+                     value="{{ user.email if user else '' }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Role <span class="text-danger">*</span></label>
+              <select name="role_id" class="form-select">
+                {% for r in roles %}
+                <option value="{{ r.id }}"
+                  {% if user and user.role_id==r.id %}selected
+                  {% elif not user and r.name=='user' %}selected{% endif %}>
+                  {{ r.name }} — {{ r.description }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            {% if user %}
+            <div class="col-md-6">
+              <label class="form-label fw-semibold small">Status</label>
+              <div class="form-check mt-2">
+                <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
+                       {% if user.is_active %}checked{% endif %}>
+                <label class="form-check-label" for="is_active">User aktif</label>
+              </div>
+            </div>
+            {% endif %}
+            {% if not user %}
+            <div class="col-12">
+              <label class="form-label fw-semibold small">Password <span class="text-danger">*</span></label>
+              <input type="password" name="password" class="form-control" required minlength="8">
+              <div class="form-text">Minimal 8 karakter</div>
+            </div>
+            {% endif %}
+          </div>
+          <div class="mt-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              {% if user %}<i class="bi bi-save me-1"></i>Simpan{% else %}<i class="bi bi-person-plus me-1"></i>Buat User{% endif %}
+            </button>
+            <a href="{{ url_for('admin.users_list') }}" class="btn btn-outline-secondary">Batal</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if user %}
+    <div class="card">
+      <div class="card-header fw-semibold text-danger">
+        <i class="bi bi-key me-1"></i>Reset Password
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">Reset paksa password. User perlu login ulang setelah ini.</p>
+        <form method="POST" action="{{ url_for('admin.admin_reset_password', uid=user.id) }}"
+              onsubmit="return confirm('Reset password user ini?')">
+          <div class="input-group">
+            <input type="password" name="new_password" class="form-control"
+                   placeholder="Password baru (min 8 karakter)" minlength="8" required>
+            <button type="submit" class="btn btn-outline-danger">Reset</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if user %}
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle me-1"></i>Info Akun</div>
+      <div class="card-body">
+        <div class="row g-2 small">
+          <div class="col-6"><div class="text-muted">Dibuat</div><div class="fw-semibold">{{ user.created_at.strftime('%d %b %Y') }}</div></div>
+          <div class="col-6"><div class="text-muted">Last Login</div>
+            <div class="fw-semibold">{% if user.last_login %}{{ user.last_login.strftime('%d %b %Y') }}{% else %}—{% endif %}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

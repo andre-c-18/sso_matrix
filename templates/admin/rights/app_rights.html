@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}Access Matrix — {{ app.app_name }}{% endblock %}
+{% block page_title %}Access Matrix — {{ app.app_name }}{% endblock %}
+{% block topbar_right %}
+  <a href="{{ url_for('rights.index') }}" class="btn btn-outline-secondary btn-sm">← Kembali</a>
+{% endblock %}
+
+{% block head %}
+<style>
+  .role-panel {
+    border: 2px solid #e2e8f0; border-radius: 12px;
+    background: #fff; overflow: hidden;
+  }
+  .role-panel-header {
+    padding: 14px 18px; background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  /* Action checkboxes */
+  .action-check { display: none; }
+  .action-label {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 82px; height: 72px; border-radius: 10px;
+    border: 2px solid #e2e8f0; cursor: pointer;
+    transition: all .15s; background: #fff; gap: 4px;
+  }
+  .action-label:hover { border-color: #94a3b8; background: #f8fafc; }
+  .action-check:checked + .action-label {
+    border-color: currentColor;
+  }
+  .action-icon { font-size: 20px; }
+  .action-text { font-size: 11px; font-weight: 700; }
+
+  /* Per-action active colors */
+  .ac-view:checked    + .action-label { border-color:#0d6efd; background:#eff6ff; color:#0d6efd; }
+  .ac-edit:checked    + .action-label { border-color:#f59e0b; background:#fffbeb; color:#b45309; }
+  .ac-export:checked  + .action-label { border-color:#10b981; background:#f0fdf4; color:#065f46; }
+  .ac-approve:checked + .action-label { border-color:#0891b2; background:#ecfeff; color:#0e7490; }
+  .ac-upload:checked  + .action-label { border-color:#6b7280; background:#f9fafb; color:#374151; }
+  .ac-delete:checked  + .action-label { border-color:#ef4444; background:#fff5f5; color:#b91c1c; }
+
+  /* Path tags */
+  .path-tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #eff6ff; border: 1px solid #bfdbfe;
+    color: #1d4ed8; border-radius: 6px;
+    padding: 3px 8px; font-size: 12px; font-family: monospace;
+  }
+  .path-tag .remove-path {
+    cursor: pointer; color: #93c5fd; border: none;
+    background: none; padding: 0; line-height: 1; font-size: 13px;
+  }
+  .path-tag .remove-path:hover { color: #1d4ed8; }
+
+  /* Config rows */
+  .cfg-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 10px; background: #f8fafc;
+    border-radius: 6px; margin-bottom: 6px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex flex-column gap-4" id="matrix-wrap">
+
+  {% for rr in role_matrix %}
+  <div class="role-panel">
+
+    <!-- Header -->
+    <div class="role-panel-header">
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge fs-6
+          {% if rr.role_name=='superadmin' %}text-bg-danger
+          {% elif rr.role_name=='admin' %}text-bg-warning text-dark
+          {% elif rr.role_name=='manager' %}text-bg-success
+          {% else %}text-bg-secondary{% endif %}">
+          {{ rr.role_name }}
+        </span>
+        {% if rr.is_saved %}
+          <span class="badge text-bg-light border text-muted">Dikustomisasi</span>
+        {% else %}
+          <span class="badge text-bg-light border text-muted">Default</span>
+        {% endif %}
+      </div>
+      <!-- Quick: select all / clear -->
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary"
+                onclick="selectAll({{ rr.role_id }})">
+          <i class="bi bi-check-all me-1"></i>Semua
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary"
+                onclick="clearAll({{ rr.role_id }})">
+          <i class="bi bi-x me-1"></i>Kosongkan
+        </button>
+      </div>
+    </div>
+
+    <div class="p-4">
+      <div class="row g-4">
+
+        <!-- Kolom 1: Standard Access (checkboxes) -->
+        <div class="col-md-4">
+          <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
+            <i class="bi bi-shield-check me-1"></i>Standard Access
+          </div>
+          <div class="d-flex flex-wrap gap-2" id="actions-{{ rr.role_id }}">
+            {% for action in actions %}
+            <div>
+              <input type="checkbox"
+                     class="action-check ac-{{ action.key }}"
+                     id="ac_{{ rr.role_id }}_{{ action.key }}"
+                     name="ac_{{ rr.role_id }}"
+                     value="{{ action.key }}"
+                     data-role="{{ rr.role_id }}"
+                     {% if action.key in rr.standard_access %}checked{% endif %}
+                     onchange="updatePreview({{ rr.role_id }})">
+              <label class="action-label" for="ac_{{ rr.role_id }}_{{ action.key }}">
+                <i class="bi {{ action.icon }} action-icon"></i>
+                <span class="action-text">{{ action.label }}</span>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Kolom 2: Path Access -->
+        <div class="col-md-4">
+          <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
+            <i class="bi bi-signpost-split me-1"></i>Path Access
+            <span class="badge text-bg-light border text-muted ms-1" style="font-size:10px">
+              route/url
+            </span>
+          </div>
+
+          <!-- Tag display -->
+          <div id="path-tags-{{ rr.role_id }}" class="d-flex flex-wrap gap-1 mb-2 min-height-32">
+            {% for p in rr.paths %}
+            <span class="path-tag">
+              {{ p }}
+              <button class="remove-path" type="button"
+                      onclick="removePath({{ rr.role_id }}, '{{ p }}')">×</button>
+            </span>
+            {% endfor %}
+          </div>
+
+          <!-- Input tambah path -->
+          <div class="input-group input-group-sm">
+            <span class="input-group-text bg-light">/</span>
+            <input type="text" class="form-control" id="path-input-{{ rr.role_id }}"
+                   placeholder="dashboard, laporan, ..."
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();addPath({{ rr.role_id }})}">
+            <button class="btn btn-outline-primary" type="button"
+                    onclick="addPath({{ rr.role_id }})">
+              <i class="bi bi-plus-lg"></i>
+            </button>
+          </div>
+          <div class="form-text">
+            Ketik path lalu Enter atau klik +. Contoh: <code>dashboard</code>, <code>laporan/export</code>
+          </div>
+
+          <!-- Hidden storage untuk paths -->
+          <div id="path-store-{{ rr.role_id }}" style="display:none"
+               data-paths="{{ rr.paths | tojson }}"></div>
+        </div>
+
+        <!-- Kolom 3: Right Config (key-value bebas) -->
+        <div class="col-md-4">
+          <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
+            <i class="bi bi-sliders me-1"></i>Right Config
+            <span class="badge text-bg-light border text-muted ms-1" style="font-size:10px">
+              JSON bebas
+            </span>
+          </div>
+
+          <div id="cfg-{{ rr.role_id }}">
+            {% if rr.extra_config %}
+              {% for key, val in rr.extra_config.items() %}
+              <div class="cfg-row" data-role="{{ rr.role_id }}">
+                <input type="text" class="form-control form-control-sm cfg-key"
+                       value="{{ key }}" placeholder="key" style="width:110px;flex-shrink:0">
+                <select class="form-select form-select-sm" style="width:72px;flex-shrink:0"
+                        onchange="updatePreview({{ rr.role_id }})">
+                  <option value="bool"   {% if val is sameas true or val is sameas false %}selected{% endif %}>bool</option>
+                  <option value="number" {% if val is number and val is not sameas true and val is not sameas false %}selected{% endif %}>num</option>
+                  <option value="string" {% if val is string %}selected{% endif %}>str</option>
+                </select>
+                <input type="text" class="form-control form-control-sm cfg-val"
+                       value="{% if val is sameas true %}true{% elif val is sameas false %}false{% else %}{{ val }}{% endif %}"
+                       placeholder="value"
+                       oninput="updatePreview({{ rr.role_id }})">
+                <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0"
+                        onclick="this.closest('.cfg-row').remove();updatePreview({{ rr.role_id }})">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-secondary mt-1"
+                  onclick="addCfgRow({{ rr.role_id }})">
+            <i class="bi bi-plus-lg me-1"></i>Tambah
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Preview JWT -->
+      <div class="mt-4 pt-3 border-top">
+        <div class="text-muted small fw-semibold mb-1">
+          <i class="bi bi-braces me-1"></i>Preview JWT payload untuk role ini:
+        </div>
+        <pre class="bg-light rounded p-3 mb-0"
+             id="preview-{{ rr.role_id }}"
+             style="font-size:11.5px;max-height:120px;overflow:auto"></pre>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<!-- Save -->
+<div class="d-flex align-items-center gap-3 mt-4">
+  <button class="btn btn-primary px-4" onclick="saveAll()">
+    <i class="bi bi-save me-2"></i>Simpan Semua
+  </button>
+  <span id="save-msg" class="small"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const APP_ID = "{{ app.app_id }}";
+
+// ── Path management ──────────────────────────────────────────
+function getPaths(roleId) {
+  const store = document.getElementById('path-store-' + roleId);
+  try { return JSON.parse(store.dataset.paths || '[]'); }
+  catch { return []; }
+}
+function setPaths(roleId, paths) {
+  const store = document.getElementById('path-store-' + roleId);
+  store.dataset.paths = JSON.stringify(paths);
+  renderPathTags(roleId, paths);
+  updatePreview(roleId);
+}
+function renderPathTags(roleId, paths) {
+  const container = document.getElementById('path-tags-' + roleId);
+  container.innerHTML = paths.map(p => `
+    <span class="path-tag">
+      ${p}
+      <button class="remove-path" type="button"
+              onclick="removePath(${roleId}, '${p.replace(/'/g,"\\'")}')">×</button>
+    </span>`).join('');
+}
+function addPath(roleId) {
+  const input = document.getElementById('path-input-' + roleId);
+  let val = input.value.trim().replace(/^\/+/, '');  // strip leading /
+  if (!val) return;
+  const full = '/' + val;
+  const paths = getPaths(roleId);
+  if (!paths.includes(full)) {
+    paths.push(full);
+    setPaths(roleId, paths);
+  }
+  input.value = '';
+  input.focus();
+}
+function removePath(roleId, path) {
+  const paths = getPaths(roleId).filter(p => p !== path);
+  setPaths(roleId, paths);
+}
+
+// ── Select / clear all actions ───────────────────────────────
+function selectAll(roleId) {
+  document.querySelectorAll(`input[name="ac_${roleId}"]`).forEach(cb => {
+    cb.checked = true;
+  });
+  updatePreview(roleId);
+}
+function clearAll(roleId) {
+  document.querySelectorAll(`input[name="ac_${roleId}"]`).forEach(cb => {
+    cb.checked = false;
+  });
+  updatePreview(roleId);
+}
+
+// ── Right config rows ────────────────────────────────────────
+function addCfgRow(roleId) {
+  const c = document.getElementById('cfg-' + roleId);
+  const d = document.createElement('div');
+  d.className = 'cfg-row'; d.dataset.role = roleId;
+  d.innerHTML = `
+    <input type="text" class="form-control form-control-sm cfg-key"
+           placeholder="key" style="width:110px;flex-shrink:0"
+           oninput="updatePreview(${roleId})">
+    <select class="form-select form-select-sm" style="width:72px;flex-shrink:0"
+            onchange="updatePreview(${roleId})">
+      <option value="bool">bool</option>
+      <option value="number">num</option>
+      <option value="string">str</option>
+    </select>
+    <input type="text" class="form-control form-control-sm cfg-val"
+           placeholder="value" oninput="updatePreview(${roleId})">
+    <button type="button" class="btn btn-sm btn-outline-danger flex-shrink-0"
+            onclick="this.closest('.cfg-row').remove();updatePreview(${roleId})">
+      <i class="bi bi-trash3"></i>
+    </button>`;
+  c.appendChild(d);
+  d.querySelector('.cfg-key').focus();
+}
+
+function getExtraConfig(roleId) {
+  const cfg = {};
+  document.querySelectorAll(`#cfg-${roleId} .cfg-row`).forEach(row => {
+    const k = row.querySelector('.cfg-key').value.trim();
+    const t = row.querySelector('select').value;
+    const v = row.querySelector('.cfg-val').value.trim();
+    if (!k) return;
+    cfg[k] = t === 'bool'   ? (v.toLowerCase() === 'true' || v === '1')
+           : t === 'number' ? (isNaN(v) ? v : Number(v))
+           : v;
+  });
+  return cfg;
+}
+
+// ── Preview ──────────────────────────────────────────────────
+function updatePreview(roleId) {
+  const actions = [...document.querySelectorAll(`input[name="ac_${roleId}"]:checked`)]
+                    .map(cb => cb.value);
+  const paths   = getPaths(roleId);
+  const extra   = getExtraConfig(roleId);
+  const preview = {
+    standard_access: actions,
+    paths:           paths,
+    right_config:    extra,
+  };
+  document.getElementById('preview-' + roleId).textContent =
+    JSON.stringify(preview, null, 2);
+}
+
+// ── Init ──────────────────────────────────────────────────────
+{% for rr in role_matrix %}
+renderPathTags({{ rr.role_id }}, {{ rr.paths | tojson }});
+updatePreview({{ rr.role_id }});
+{% endfor %}
+
+// ── Save ──────────────────────────────────────────────────────
+async function saveAll() {
+  const msg = document.getElementById('save-msg');
+  msg.textContent = 'Menyimpan...'; msg.className = 'small text-muted';
+
+  const matrix = {};
+  {% for rr in role_matrix %}
+  {
+    const id      = {{ rr.role_id }};
+    const actions = [...document.querySelectorAll(`input[name="ac_${id}"]:checked`)]
+                      .map(cb => cb.value);
+    const paths   = getPaths(id);
+    const extra   = getExtraConfig(id);
+    matrix[id] = { standard_access: actions, paths: paths, extra: extra };
+  }
+  {% endfor %}
+
+  try {
+    const res  = await fetch(`/rights/${APP_ID}/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matrix })
+    });
+    const data = await res.json();
+    if (data.success) {
+      msg.textContent = '✓ Berhasil disimpan!';
+      msg.className   = 'small text-success fw-semibold';
+    } else {
+      msg.textContent = '✗ Gagal: ' + (data.error || 'error');
+      msg.className   = 'small text-danger';
+    }
+  } catch (e) {
+    msg.textContent = '✗ ' + e.message;
+    msg.className   = 'small text-danger';
+  }
+  setTimeout(() => msg.textContent = '', 4000);
+}
+</script>
+{% endblock %}
