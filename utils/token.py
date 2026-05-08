@@ -24,19 +24,19 @@ def generate_access_token(user: dict, app_id: str) -> dict:
         'exp': int(expires.timestamp()),
         'jti': str(uuid.uuid4()),
         # User
-        'user_id':   user['id'],
-        'username':  user['username'],
-        'email':     user['email'],
+        'user_id': user['id'],
+        'username': user['username'],
+        'email': user['email'],
         'full_name': user['full_name'],
         # Role
-        'role':      user['role_name'],
-        'role_id':   user['role_id'],
+        'role': user['role_name'],
+        'role_id': user['role_id'],
         # Access Matrix
         'standard_access': user.get('standard_access') or [],
         # ['view', 'edit', 'export', 'approve', 'upload', 'delete']
-        'paths':           right_config.get('paths', []),
+        'paths': right_config.get('paths', []),
         # ['/dashboard', '/laporan', ...]
-        'right_config':    {k: v for k, v in right_config.items() if k != 'paths'},
+        'right_config': {k: v for k, v in right_config.items() if k != 'paths'},
         # key-value lain selain paths
         'app_id': app_id,
     }
