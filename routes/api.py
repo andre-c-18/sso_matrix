@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from utils.db import query_one, query_all
 from utils.token import verify_access_token, generate_access_token
 from utils.auth import log_audit
+from routes.rights import get_merged_access 
 
 api_bp = Blueprint('api', __name__)
 
@@ -64,7 +65,6 @@ def verify_token():
     if not user or not user['is_active']:
         return jsonify({'valid': False, 'error': 'User tidak aktif'}), 401
     
-    from routes.rights import get_merged_access 
     permissions, source = get_merged_access(user['id'], app['id'])
 
     print(f"DEBUG: User ID: {user['id']}, App ID: {app['id']}")
@@ -84,7 +84,6 @@ def verify_token():
             'standard_access': permissions['standard_access'] if permissions else [],
             'paths': permissions['paths'] if permissions else [],
             'extra_config': permissions['extra_config'] if permissions else {},
-            'data_source': source
         },
         'token_info': {
             'expires_at': payload.get('exp'),
@@ -204,38 +203,6 @@ def get_user(user_id):
 # =============================================
 # POST /api/impersonate
 # =============================================
-def _get_access_matrix(app_id: str, role_id: int) -> dict:
-    """Ambil access matrix untuk role ini di app ini."""
-    import json
-    row = query_one(
-        """SELECT am.standard_access, am.right_config
-           FROM access_matrix am
-           WHERE am.app_id = :app_id AND am.role_id = :role_id""",
-        {'app_id': app_id, 'role_id': role_id}
-    )
-    if row:
-        sa = row['standard_access']
-        if isinstance(sa, str):
-            try: sa = json.loads(sa)
-            except: sa = []
-        rc = row['right_config']
-        if isinstance(rc, str):
-            try: rc = json.loads(rc)
-            except: rc = {}
-        return {
-            'standard_access': sa or [],
-            'right_config':    rc or {},
-        }
-    # Default fallback — belum dikonfigurasi = view only
-    defaults = {1: ['view','edit','export','approve','upload','delete'],
-                2: ['view','edit','export','approve','upload','delete'],
-                3: ['view','edit','export','approve'],
-                4: ['view']}
-    return {
-        'standard_access': defaults.get(role_id, ['view']),
-        'right_config':    {},
-    }
-
 @api_bp.route('/impersonate', methods=['POST'])
 def generate_impersonate_token():
     app, err_resp, err_code = _app_auth()
@@ -261,14 +228,14 @@ def generate_impersonate_token():
     if user['role_name'] == 'superadmin':
         return jsonify({'error': 'Tidak dapat impersonate ke sesama superadmin'}), 403
 
-    matrix = _get_access_matrix(
-        app['id'] if app else 'sso_admin', 
-        user['role_id']
+    permissions, source = get_merged_access(
+        user['id'],
+        app['id'] if app else 'sso_admin'
     )
 
     user_data = dict(user)
-    user_data['standard_access'] = matrix['standard_access']
-    user_data['right_config']    = matrix['right_config']
+    user_data['standard_access'] = permissions.get('standard_access', [])
+    user_data['extra_config']    = permissions.get('extra_config', {})
 
     app_id_from_request = request.headers.get('X-App-ID')
     token_data = generate_access_token(user_data, app_id_from_request or 'sso_admin')
@@ -278,5 +245,5 @@ def generate_impersonate_token():
         'access_token': token_data['access_token'],
         'expires_in':   token_data['expires_in'],
         'expires_at':   token_data['expires_at'],
-        'user':         user
+        'user':         user_data
     }), 200
