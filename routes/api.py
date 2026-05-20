@@ -78,7 +78,7 @@ def verify_token():
             'username': user['username'],
             'email': user['email'],
             'full_name': user['full_name'],
-            'role': user['role_name'],
+            'role_name': user['role_name'],
             'role_id': user['role_id'],
 
             'standard_access': permissions['standard_access'] if permissions else [],
