@@ -67,10 +67,6 @@ def verify_token():
     
     permissions, source = get_merged_access(user['id'], app['id'])
 
-    print(f"DEBUG: User ID: {user['id']}, App ID: {app['id']}")
-    print(f"DEBUG: Permissions result: {permissions}")
-    print(f"DEBUG: Source: {source}")
-
     return jsonify({
         'valid': True,
         'user': {
@@ -94,17 +90,38 @@ def verify_token():
 
 
 # =============================================
-# POST /api/revoke — tetap ada tapi no-op
-# Agar aplikasi client tidak error saat panggil
+# POST /api/validate-token
+# Pengecekan token sudah expired atau tidak
 # =============================================
-@api_bp.route('/revoke', methods=['POST'])
-def revoke_token():
-    # Tanpa token_sessions, revoke tidak bisa dilakukan
-    # Token akan expired sendiri sesuai JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+@api_bp.route('/validate-token', methods=['POST'])
+def validate_token():
+    app, err_resp, err_code = _app_auth()
+    if err_resp:
+        return err_resp, err_code
+
+    data  = request.get_json() or {}
+    token = data.get('access_token')
+    if not token:
+        return jsonify({'valid': False, 'error': 'access_token wajib'}), 400
+
+    try:
+        payload = verify_access_token(token, app['app_id'])
+    except Exception as e:
+        return jsonify({'valid': False, 'error': f'Token tidak valid atau expired: {str(e)}'}), 401
+
+    user = query_one(
+        "SELECT is_active FROM users WHERE id = :uid",
+        {'uid': payload['user_id']}
+    )
+
+    if not user or not user['is_active']:
+        return jsonify({'valid': False, 'error': 'User sudah tidak aktif'}), 401
+    
     return jsonify({
-        'success': True,
-        'message': 'Token akan expired sesuai waktu berlakunya'
-    })
+        'valid': True,
+        'message': 'Token aktif',
+        'expires_at': payload.get('exp')
+    }), 200
 
 
 # =============================================
