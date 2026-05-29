@@ -250,6 +250,9 @@ def generate_impersonate_token():
         app['id'] if app else 'sso_admin'
     )
 
+    if permissions is None:
+        permissions = {}
+        
     user_data = dict(user)
     user_data['standard_access'] = permissions.get('standard_access', [])
     user_data['extra_config']    = permissions.get('extra_config', {})
