@@ -35,6 +35,12 @@
             </div>
           </div>
           <div class="mb-3">
+            <label class="form-label small fw-semibold">Sync Module URL <span class="text-danger">*</span></label>
+            <input type="url" name="sync_url" class="form-control"
+                   value="{{ app.sync_url if app else '' }}" required
+                   placeholder="https://app-anda.com/auth/sync-module">
+          </div>
+          <div class="mb-3">
             <label class="form-label small fw-semibold">Allowed Origins</label>
             <textarea name="allowed_origins" class="form-control" rows="2"
                       placeholder="https://app-anda.com&#10;https://staging.app-anda.com">{{ app.allowed_origins if app else '' }}</textarea>

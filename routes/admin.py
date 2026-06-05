@@ -3,7 +3,7 @@ import secrets
 from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify, flash
 from utils.db import query_one, query_all, execute
 from utils.auth import hash_password, check_password, log_audit
-from utils.decorators import login_required, superadmin_required
+from utils.decorators import login_required
 
 admin_bp = Blueprint('admin', __name__)
 SSO_BASE = os.getenv('SSO_BASE_URL', 'http://localhost:5000')
@@ -218,6 +218,7 @@ def app_create():
         app_name        = request.form.get('app_name', '').strip()
         description     = request.form.get('description', '').strip()
         callback_url    = request.form.get('callback_url', '').strip()
+        sync_url    = request.form.get('sync_url', '').strip()
         allowed_origins = request.form.get('allowed_origins', '').strip()
         auto_redirect   = 1 if request.form.get('auto_redirect') else 0
 
@@ -228,12 +229,12 @@ def app_create():
             app_secret = secrets.token_urlsafe(32)
             execute(
                 """INSERT INTO applications
-                   (app_id, app_secret, app_name, description, callback_url,
+                   (app_id, app_secret, app_name, description, callback_url, sync_url,
                     allowed_origins, auto_redirect, created_by)
-                   VALUES (:app_id, :secret, :name, :desc, :cb, :origins, :ar, :created_by)""",
+                   VALUES (:app_id, :secret, :name, :desc, :cb, :sy, :origins, :ar, :created_by)""",
                 {
                     'app_id': app_id, 'secret': app_secret, 'name': app_name,
-                    'desc': description, 'cb': callback_url, 'origins': allowed_origins,
+                    'desc': description, 'cb': callback_url, 'sy': sync_url , 'origins': allowed_origins,
                     'ar': auto_redirect, 'created_by': session['admin_user_id']
                 }
             )
@@ -254,17 +255,18 @@ def app_edit(app_id):
     if request.method == 'POST':
         execute(
             """UPDATE applications SET app_name = :name, description = :desc,
-               callback_url = :cb, allowed_origins = :origins,
+               callback_url = :cb, sync_url = :sy, allowed_origins = :origins,
                auto_redirect = :ar, is_active = :active
                WHERE app_id = :app_id""",
             {
-                'name':    request.form.get('app_name', '').strip(),
-                'desc':    request.form.get('description', '').strip(),
-                'cb':      request.form.get('callback_url', '').strip(),
+                'name': request.form.get('app_name', '').strip(),
+                'desc': request.form.get('description', '').strip(),
+                'cb': request.form.get('callback_url', '').strip(),
+                'sy': request.form.get('sync_url', '').strip(),
                 'origins': request.form.get('allowed_origins', '').strip(),
-                'ar':      1 if request.form.get('auto_redirect') else 0,
-                'active':  1 if request.form.get('is_active') else 0,
-                'app_id':  app_id,
+                'ar': 1 if request.form.get('auto_redirect') else 0,
+                'active': 1 if request.form.get('is_active') else 0,
+                'app_id': app_id,
             }
         )
         log_audit(session['admin_user_id'], 'APP_UPDATED', f'app_id={app_id}', request.remote_addr)
