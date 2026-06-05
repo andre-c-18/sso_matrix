@@ -255,6 +255,7 @@ def generate_impersonate_token():
         
     user_data = dict(user)
     user_data['standard_access'] = permissions.get('standard_access', [])
+    user_data['paths'] = permissions.get('paths', [])
     user_data['extra_config']    = permissions.get('extra_config', {})
 
     app_id_from_request = request.headers.get('X-App-ID')

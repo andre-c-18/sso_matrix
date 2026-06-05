@@ -2,6 +2,9 @@
 {% block title %}Access Matrix — {{ app.app_name }}{% endblock %}
 {% block page_title %}Access Matrix — {{ app.app_name }}{% endblock %}
 {% block topbar_right %}
+  <button id="btn-sync-modules" class="btn btn-primary btn-sm me-2" onclick="pullModules()">
+    <i class="bi bi-arrow-repeat me-1"></i> Tarik Modul dari Aplikasi
+  </button>
   <a href="{{ url_for('rights.index') }}" class="btn btn-outline-secondary btn-sm">← Kembali</a>
 {% endblock %}
 
@@ -40,18 +43,15 @@
   .ac-upload:checked  + .action-label { border-color:#6b7280; background:#f9fafb; color:#374151; }
   .ac-delete:checked  + .action-label { border-color:#ef4444; background:#fff5f5; color:#b91c1c; }
 
-  /* Path tags */
-  .path-tag {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: #eff6ff; border: 1px solid #bfdbfe;
-    color: #1d4ed8; border-radius: 6px;
-    padding: 3px 8px; font-size: 12px; font-family: monospace;
+  /* Container list checkbox path agar rapi dan ada scroll jika kepanjangan */
+  .path-scroll-container {
+    max-height: 215px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    background-color: #f8fafc;
   }
-  .path-tag .remove-path {
-    cursor: pointer; color: #93c5fd; border: none;
-    background: none; padding: 0; line-height: 1; font-size: 13px;
-  }
-  .path-tag .remove-path:hover { color: #1d4ed8; }
 
   /* Config rows */
   .cfg-row {
@@ -69,7 +69,6 @@
   {% for rr in role_matrix %}
   <div class="role-panel">
 
-    <!-- Header -->
     <div class="role-panel-header">
       <div class="d-flex align-items-center gap-2">
         <span class="badge fs-6
@@ -85,15 +84,14 @@
           <span class="badge text-bg-light border text-muted">Default</span>
         {% endif %}
       </div>
-      <!-- Quick: select all / clear -->
       <div class="d-flex gap-2">
         <button type="button" class="btn btn-sm btn-outline-primary"
                 onclick="selectAll({{ rr.role_id }})">
-          <i class="bi bi-check-all me-1"></i>Semua
+          <i class="bi bi-check-all me-1"></i>Semua Standard
         </button>
         <button type="button" class="btn btn-sm btn-outline-secondary"
                 onclick="clearAll({{ rr.role_id }})">
-          <i class="bi bi-x me-1"></i>Kosongkan
+          <i class="bi bi-x me-1"></i>Kosongkan Standard
         </button>
       </div>
     </div>
@@ -101,7 +99,6 @@
     <div class="p-4">
       <div class="row g-4">
 
-        <!-- Kolom 1: Standard Access (checkboxes) -->
         <div class="col-md-4">
           <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
             <i class="bi bi-shield-check me-1"></i>Standard Access
@@ -126,47 +123,42 @@
           </div>
         </div>
 
-        <!-- Kolom 2: Path Access -->
         <div class="col-md-4">
-          <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
-            <i class="bi bi-signpost-split me-1"></i>Path Access
-            <span class="badge text-bg-light border text-muted ms-1" style="font-size:10px">
-              route/url
-            </span>
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.6px">
+              <i class="bi bi-signpost-split me-1"></i>Path Access (Modul)
+            </div>
+            <div class="btn-group">
+              <button type="button" class="btn btn-link p-0 text-decoration-none me-2 fw-bold" style="font-size: 11px;" onclick="selectAllPaths({{ rr.role_id }})">Semua</button>
+              <button type="button" class="btn btn-link p-0 text-decoration-none text-secondary fw-bold" style="font-size: 11px;" onclick="clearAllPaths({{ rr.role_id }})">Kosongkan</button>
+            </div>
           </div>
 
-          <!-- Tag display -->
-          <div id="path-tags-{{ rr.role_id }}" class="d-flex flex-wrap gap-1 mb-2 min-height-32">
-            {% for p in rr.paths %}
-            <span class="path-tag">
-              {{ p }}
-              <button class="remove-path" type="button"
-                      onclick="removePath({{ rr.role_id }}, '{{ p }}')">×</button>
-            </span>
+          <div class="path-scroll-container">
+            {% for mod in app_modules %}
+              {% set path_value = '/' ~ mod.module_key %}
+              <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" 
+                       id="path_{{ rr.role_id }}_{{ mod.module_key }}"
+                       name="path_{{ rr.role_id }}"
+                       value="{{ path_value }}"
+                       {% if path_value in rr.paths %}checked{% endif %}
+                       onchange="updatePreview({{ rr.role_id }})">
+                <label class="form-check-label small text-dark d-block" for="path_{{ rr.role_id }}_{{ mod.module_key }}">
+                  <span class="fw-semibold">{{ mod.module_name }}</span> 
+                  <code class="text-muted ms-1" style="font-size: 11px;">({{ path_value }})</code>
+                </label>
+              </div>
             {% endfor %}
+            {% if not app_modules %}
+              <div class="text-center text-muted small py-4">Belum ada modul. Silakan klik "Tarik Modul dari Aplikasi" di atas.</div>
+            {% endif %}
           </div>
-
-          <!-- Input tambah path -->
-          <div class="input-group input-group-sm">
-            <span class="input-group-text bg-light">/</span>
-            <input type="text" class="form-control" id="path-input-{{ rr.role_id }}"
-                   placeholder="dashboard, laporan, ..."
-                   onkeydown="if(event.key==='Enter'){event.preventDefault();addPath({{ rr.role_id }})}">
-            <button class="btn btn-outline-primary" type="button"
-                    onclick="addPath({{ rr.role_id }})">
-              <i class="bi bi-plus-lg"></i>
-            </button>
+          <div class="form-text mt-2">
+            Centang modul-modul di atas yang diizinkan untuk diakses oleh role ini.
           </div>
-          <div class="form-text">
-            Ketik path lalu Enter atau klik +. Contoh: <code>dashboard</code>, <code>laporan/export</code>
-          </div>
-
-          <!-- Hidden storage untuk paths -->
-          <div id="path-store-{{ rr.role_id }}" style="display:none"
-               data-paths="{{ rr.paths | tojson }}"></div>
         </div>
 
-        <!-- Kolom 3: Right Config (key-value bebas) -->
         <div class="col-md-4">
           <div class="fw-semibold small text-muted text-uppercase mb-3" style="letter-spacing:.6px">
             <i class="bi bi-sliders me-1"></i>Right Config
@@ -207,7 +199,6 @@
 
       </div>
 
-      <!-- Preview JWT -->
       <div class="mt-4 pt-3 border-top">
         <div class="text-muted small fw-semibold mb-1">
           <i class="bi bi-braces me-1"></i>Preview JWT payload untuk role ini:
@@ -222,7 +213,6 @@
 
 </div>
 
-<!-- Save -->
 <div class="d-flex align-items-center gap-3 mt-4">
   <button class="btn btn-primary px-4" onclick="saveAll()">
     <i class="bi bi-save me-2"></i>Simpan Semua
@@ -235,46 +225,22 @@
 <script>
 const APP_ID = "{{ app.app_id }}";
 
-// ── Path management ──────────────────────────────────────────
-function getPaths(roleId) {
-  const store = document.getElementById('path-store-' + roleId);
-  try { return JSON.parse(store.dataset.paths || '[]'); }
-  catch { return []; }
-}
-function setPaths(roleId, paths) {
-  const store = document.getElementById('path-store-' + roleId);
-  store.dataset.paths = JSON.stringify(paths);
-  renderPathTags(roleId, paths);
+// ── Quick Check / Uncheck khusus untuk Kolom Path Access ─────
+function selectAllPaths(roleId) {
+  document.querySelectorAll(`input[name="path_${roleId}"]`).forEach(cb => {
+    cb.checked = true;
+  });
   updatePreview(roleId);
 }
-function renderPathTags(roleId, paths) {
-  const container = document.getElementById('path-tags-' + roleId);
-  container.innerHTML = paths.map(p => `
-    <span class="path-tag">
-      ${p}
-      <button class="remove-path" type="button"
-              onclick="removePath(${roleId}, '${p.replace(/'/g,"\\'")}')">×</button>
-    </span>`).join('');
-}
-function addPath(roleId) {
-  const input = document.getElementById('path-input-' + roleId);
-  let val = input.value.trim().replace(/^\/+/, '');  // strip leading /
-  if (!val) return;
-  const full = '/' + val;
-  const paths = getPaths(roleId);
-  if (!paths.includes(full)) {
-    paths.push(full);
-    setPaths(roleId, paths);
-  }
-  input.value = '';
-  input.focus();
-}
-function removePath(roleId, path) {
-  const paths = getPaths(roleId).filter(p => p !== path);
-  setPaths(roleId, paths);
+
+function clearAllPaths(roleId) {
+  document.querySelectorAll(`input[name="path_${roleId}"]`).forEach(cb => {
+    cb.checked = false;
+  });
+  updatePreview(roleId);
 }
 
-// ── Select / clear all actions ───────────────────────────────
+// ── Select / clear all Standard Actions ───────────────────────
 function selectAll(roleId) {
   document.querySelectorAll(`input[name="ac_${roleId}"]`).forEach(cb => {
     cb.checked = true;
@@ -327,11 +293,15 @@ function getExtraConfig(roleId) {
   return cfg;
 }
 
-// ── Preview ──────────────────────────────────────────────────
+// ── Preview (Membaca dinamis dari checkbox yang tercentang) ──
 function updatePreview(roleId) {
   const actions = [...document.querySelectorAll(`input[name="ac_${roleId}"]:checked`)]
                     .map(cb => cb.value);
-  const paths   = getPaths(roleId);
+                    
+  // Ambil data path langsung dari checkbox kolom 2 yang tercentang
+  const paths = [...document.querySelectorAll(`input[name="path_${roleId}"]:checked`)]
+                    .map(cb => cb.value);
+                    
   const extra   = getExtraConfig(roleId);
   const preview = {
     standard_access: actions,
@@ -344,11 +314,10 @@ function updatePreview(roleId) {
 
 // ── Init ──────────────────────────────────────────────────────
 {% for rr in role_matrix %}
-renderPathTags({{ rr.role_id }}, {{ rr.paths | tojson }});
 updatePreview({{ rr.role_id }});
 {% endfor %}
 
-// ── Save ──────────────────────────────────────────────────────
+// ── Save (Mengirimkan hasil modifikasi checkbox ke Python) ──
 async function saveAll() {
   const msg = document.getElementById('save-msg');
   msg.textContent = 'Menyimpan...'; msg.className = 'small text-muted';
@@ -359,7 +328,11 @@ async function saveAll() {
     const id      = {{ rr.role_id }};
     const actions = [...document.querySelectorAll(`input[name="ac_${id}"]:checked`)]
                       .map(cb => cb.value);
-    const paths   = getPaths(id);
+                      
+    // Baca checkbox path yang aktif untuk role ini
+    const paths = [...document.querySelectorAll(`input[name="path_${id}"]:checked`)]
+                      .map(cb => cb.value);
+                      
     const extra   = getExtraConfig(id);
     matrix[id] = { standard_access: actions, paths: paths, extra: extra };
   }
@@ -384,6 +357,35 @@ async function saveAll() {
     msg.className   = 'small text-danger';
   }
   setTimeout(() => msg.textContent = '', 4000);
+}
+
+// Fitur Tarik Modul API
+async function pullModules() {
+  const btn = document.getElementById('btn-sync-modules');
+  const oldHtml = btn.innerHTML;
+  
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Menarik Data...';
+
+  try {
+    const res = await fetch(`/rights/${APP_ID}/sync-modules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      alert('✓ ' + data.message);
+      window.location.reload();
+    } else {
+      alert('✗ Gagal: ' + data.error);
+    }
+  } catch (e) {
+    alert('✗ Terjadi kesalahan jaringan: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
 }
 </script>
 {% endblock %}

@@ -39,18 +39,15 @@
   .ac-upload:checked  + .action-label { border-color:#6b7280; background:#f9fafb; color:#374151; }
   .ac-delete:checked  + .action-label { border-color:#ef4444; background:#fff5f5; color:#b91c1c; }
 
-  /* Path tags */
-  .path-tag {
-    display: inline-flex; align-items: center; gap: 5px;
-    background: #eff6ff; border: 1px solid #bfdbfe;
-    color: #1d4ed8; border-radius: 6px;
-    padding: 3px 8px; font-size: 12px; font-family: monospace;
+  /* Container list checkbox path agar rapi dan ada scroll jika kepanjangan */
+  .path-scroll-container {
+    max-height: 215px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    background-color: #f8fafc;
   }
-  .path-tag .remove-path {
-    cursor: pointer; color: #93c5fd; border: none;
-    background: none; padding: 0; line-height: 1; font-size: 13px;
-  }
-  .path-tag .remove-path:hover { color: #1d4ed8; }
 
   /* Config rows */
   .cfg-row {
@@ -87,6 +84,7 @@
 
     <div class="p-4">
         <div class="row g-4">
+            
             <div class="col-md-4">
                 <div class="fw-semibold small text-muted text-uppercase mb-3">Standard Access</div>
                 <div class="d-flex flex-wrap gap-2">
@@ -106,14 +104,39 @@
             </div>
 
             <div class="col-md-4">
-                <div class="fw-semibold small text-muted text-uppercase mb-3">Path Access</div>
-                <div id="path-tags" class="d-flex flex-wrap gap-1 mb-2"></div>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text">/</span>
-                    <input type="text" class="form-control" id="path-input" placeholder="contoh: gudang/bs">
-                    <button class="btn btn-outline-primary" onclick="addPath()"><i class="bi bi-plus-lg"></i></button>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="fw-semibold small text-muted text-uppercase" style="letter-spacing:.6px">
+                        Path Access (Modul Override)
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-link p-0 text-decoration-none me-2 fw-bold" style="font-size: 11px;" onclick="selectAllPaths()">Semua</button>
+                        <button type="button" class="btn btn-link p-0 text-decoration-none text-secondary fw-bold" style="font-size: 11px;" onclick="clearAllPaths()">Kosongkan</button>
+                    </div>
                 </div>
-                <div id="path-store" style="display:none" data-paths="{{ paths | tojson }}"></div>
+
+                <div class="path-scroll-container">
+                    {% for mod in app_modules %}
+                        {% set path_value = '/' ~ mod.module_key %}
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="path_{{ mod.module_key }}"
+                                   name="user_path"
+                                   value="{{ path_value }}"
+                                   {% if path_value in paths %}checked{% endif %}
+                                   onchange="updatePreview()">
+                            <label class="form-check-label small text-dark d-block" for="path_{{ mod.module_key }}">
+                                <span class="fw-semibold">{{ mod.module_name }}</span> 
+                                <code class="text-muted ms-1" style="font-size: 11px;">({{ path_value }})</code>
+                            </label>
+                        </div>
+                    {% endfor %}
+                    {% if not app_modules %}
+                        <div class="text-center text-muted small py-4">Belum ada modul ter-sync. Silakan sync modul di menu Rights aplikasi terlebih dahulu.</div>
+                    {% endif %}
+                </div>
+                <div class="form-text mt-2">
+                    Centang modul khusus yang ingin diberikan sebagai override hak akses untuk user ini.
+                </div>
             </div>
 
             <div class="col-md-4">
@@ -158,51 +181,24 @@
 
 {% block scripts %}
 <script>
-// 1. Data Dasar dari Jinja
+// Data Dasar dari Jinja
 const USER_ID = Number("{{ user.id }}");
 const APP_ID_STRING = "{{ app.app_id }}";
 const APP_INTERNAL_ID = Number("{{ app.id }}");
 
-// ── Path Management (Sama dengan app_rights) ──────────────────
-function getPaths() {
-    const store = document.getElementById('path-store');
-    try { return JSON.parse(store.dataset.paths || '[]'); }
-    catch { return []; }
-}
-
-function setPaths(paths) {
-    const store = document.getElementById('path-store');
-    store.dataset.paths = JSON.stringify(paths);
-    renderPathTags(paths);
+// ── Quick Check / Uncheck khusus untuk Kolom Path Access ─────
+function selectAllPaths() {
+    document.querySelectorAll('input[name="user_path"]').forEach(cb => {
+        cb.checked = true;
+    });
     updatePreview();
 }
 
-function renderPathTags(paths) {
-    const container = document.getElementById('path-tags');
-    container.innerHTML = paths.map(p => `
-        <span class="path-tag">
-            ${p}
-            <button class="remove-path" type="button" onclick="removePath('${p.replace(/'/g,"\\'")}')">×</button>
-        </span>`).join('');
-}
-
-function addPath() {
-    const input = document.getElementById('path-input');
-    let val = input.value.trim().replace(/^\/+/, ''); 
-    if (!val) return;
-    const full = '/' + val;
-    const paths = getPaths();
-    if (!paths.includes(full)) {
-        paths.push(full);
-        setPaths(paths);
-    }
-    input.value = '';
-    input.focus();
-}
-
-function removePath(path) {
-    const paths = getPaths().filter(p => p !== path);
-    setPaths(paths);
+function clearAllPaths() {
+    document.querySelectorAll('input[name="user_path"]').forEach(cb => {
+        cb.checked = false;
+    });
+    updatePreview();
 }
 
 // ── Right Config (Key-Value) ──────────────────────────────────
@@ -241,7 +237,9 @@ function getExtraConfig() {
 // ── Preview & Init ───────────────────────────────────────────
 function updatePreview() {
     const actions = [...document.querySelectorAll('input[name="user_ac"]:checked')].map(cb => cb.value);
-    const paths = getPaths();
+    
+    // Ambil data path langsung dari checkbox kolom 2 yang aktif tercentang
+    const paths = [...document.querySelectorAll('input[name="user_path"]:checked')].map(cb => cb.value);
     const extra = getExtraConfig();
 
     const finalConfig = {
@@ -257,7 +255,6 @@ function updatePreview() {
 
 // Jalankan saat halaman siap
 document.addEventListener('DOMContentLoaded', () => {
-    renderPathTags(getPaths());
     updatePreview();
 });
 
@@ -267,7 +264,9 @@ async function saveOverride() {
     const originalContent = btn.innerHTML;
 
     const actions = [...document.querySelectorAll('input[name="user_ac"]:checked')].map(cb => cb.value);
-    const paths = getPaths();
+    
+    // Baca data checkbox path yang aktif tercentang untuk payload simpan
+    const paths = [...document.querySelectorAll('input[name="user_path"]:checked')].map(cb => cb.value);
     const extra = getExtraConfig();
 
     const payload = {
@@ -322,7 +321,6 @@ async function deleteOverride() {
         const data = await res.json();
         if (data.success) {
             alert('✓ Override dihapus. User kembali ke pengaturan Role.');
-            // Redirect kembali ke daftar user atau reload
             window.location.href = '/rights/user-overrides'; 
         } else {
             alert('✗ Gagal menghapus: ' + (data.error || 'Terjadi kesalahan'));

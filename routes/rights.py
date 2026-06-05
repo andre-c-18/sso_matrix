@@ -1,7 +1,7 @@
 """
 rights.py — Access Matrix dengan standard_access (6 aksi) + right_config (paths + key-value)
 """
-import json
+import json, requests
 from flask import Blueprint, render_template, request, jsonify, session
 from utils.db import query_one, query_all, execute
 from utils.decorators import login_required
@@ -88,12 +88,18 @@ def app_rights(app_id):
             'extra_config':   extra_cfg,
             'is_saved':       row['matrix_id'] is not None,
         })
+    
+    app_modules = query_all(
+        "SELECT module_key, module_name FROM app_modules WHERE app_id = :aid ORDER BY id ASC",
+        {'aid': app['id']}
+    )
 
     return render_template(
         'admin/rights/app_rights.html',
         app=app,
         actions=ACTIONS,
         role_matrix=role_matrix,
+        app_modules=app_modules
     )
 
 
@@ -196,6 +202,8 @@ def user_rights_detail(user_id, app_id):
     paths = rc.pop('paths', [])
     extra_config = rc
 
+    app_modules = query_all("SELECT module_key, module_name FROM app_modules WHERE app_id = :aid ORDER BY id ASC", {'aid': app['id']})
+
     return render_template(
         'admin/rights/user_override.html',
         user=user,
@@ -203,7 +211,8 @@ def user_rights_detail(user_id, app_id):
         actions=ACTIONS,
         standard_access=sa,
         paths=paths,
-        extra_config=extra_config
+        extra_config=extra_config,
+        app_modules=app_modules
     )
 
 # ── POST /rights/user/save ────────────────────────────────────
@@ -288,3 +297,71 @@ def get_merged_access(user_id, app_id):
         'paths': paths,
         'extra_config': rc
     }, source
+
+# ── POST /<app_id>/sync-modules — untuk sync module dari app ─────────
+@rights_bp.route('/<app_id>/sync-modules', methods=['POST'])
+@login_required
+def sync_app_modules(app_id):
+    app = query_one(
+        "SELECT id, app_id, app_name, sync_url, app_secret FROM applications WHERE app_id = :app_id", 
+        {'app_id': app_id}
+    )
+
+    if not app or not app.get('sync_url'):
+        return jsonify({'success': False, 'error': 'Aplikasi atau URL target tidak ditemukan'}), 404
+
+    target_url = app['sync_url']
+    
+    headers = {
+        'X-App-ID': app['app_id'],
+        'X-App-Secret': app['app_secret']
+    }
+
+    try:
+        response = requests.get(target_url, headers=headers, timeout=5)
+        if response.status_code != 200:
+            return jsonify({'success': False, 'error': f"Aplikasi Client menolak (HTTP {response.status_code})"}), 400
+            
+        try:
+            result = response.json()
+        except ValueError:
+            # Jika bukan JSON, muntahkan 250 karakter pertama dari respon PHP
+            return jsonify({
+                'success': False, 
+                'error': f"PHP tidak mengembalikan JSON. Respon Mentah: {response.text}"
+            }), 400
+        
+        if result.get('status') != 'success':
+            return jsonify({'success': False, 'error': result.get('message', 'Gagal sinkronisasi')}), 400
+
+        modules_from_client = result.get('data', [])
+        
+        for mod in modules_from_client:
+            if mod.get('type') == 'divider' or not mod.get('key'):
+                continue
+
+            module_key  = mod.get('key')
+            module_name = mod.get('name')
+            module_desc = mod.get('desc', '')
+
+            existing = query_one(
+                "SELECT id FROM app_modules WHERE app_id = :aid AND module_key = :mkey",
+                {'aid': app['id'], 'mkey': module_key}
+            )
+            
+            if existing:
+                execute(
+                    "UPDATE app_modules SET module_name = :mname, module_desc = :mdesc WHERE id = :id",
+                    {'mname': module_name, 'mdesc': module_desc, 'id': existing['id']}
+                )
+            else:
+                execute(
+                    "INSERT INTO app_modules (app_id, module_key, module_name, module_desc) VALUES (:aid, :mkey, :mname, :mdesc)",
+                    {'aid': app['id'], 'mkey': module_key, 'mname': module_name, 'mdesc': module_desc}
+                )
+
+        log_audit(session['admin_user_id'], 'APP_MODULES_SYNCED', f'app={app_id}', request.remote_addr)
+        return jsonify({'success': True, 'message': f"Berhasil menarik {len(modules_from_client)} modul!"})
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({'success': False, 'error': f"Gagal menghubungi Client: {str(e)}"}), 500
